@@ -1,56 +1,51 @@
 ﻿using System;
+using System.CommandLine;
+using System.CommandLine.Binding;
 using System.Text.RegularExpressions;
 
-namespace VRCFaceTracking
+namespace VRCFaceTracking.CommandLine
 {
-    public static class ArgsHandler
+    public class Arguments
     {
-        public static (int SendPort, string IP, int RecievePort, bool EnableEye, bool EnableLip) HandleArgs()
+        public string IP { get; set; }
+        public int SendPort { get; set; }
+        public int ReceivePort { get; set; }
+        public bool EnableEye { get; set; }
+        public bool EnableExpression { get; set; }
+    }
+
+    public class ArgumentsBinder : BinderBase<Arguments>
+    {
+        private readonly Option<string> _ipAndPorts;
+        private readonly Option<bool> _enableEye;
+        private readonly Option<bool> _enableExpression;
+
+        public ArgumentsBinder(Option<string> ipAndPorts, Option<bool> enableEye, Option<bool> enableExpression)
         {
-            (int SendPort, string IP, int RecievePort) = (9000, "127.0.0.1", 9001);
-            (bool EnableEye, bool EnableLip) = (true, true);
-            
-            foreach (var arg in Environment.GetCommandLineArgs())
+            _ipAndPorts = ipAndPorts;
+            _enableEye = enableEye;
+            _enableExpression = enableExpression;
+        }
+
+        protected override Arguments GetBoundValue(BindingContext bindingContext)
+        {
+            var split = bindingContext.ParseResult.GetValueForOption(_ipAndPorts).Split(':');
+            var ip = split[1];
+
+            if (!new Regex("^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$").IsMatch(ip) 
+                || !int.TryParse(split[0], out var sendPort)
+                || !int.TryParse(split[2], out var receivePort))
+                throw new ArgumentException("Invalid IP Address or Port");
+
+            return new()
             {
-                if (arg.StartsWith("--osc="))
-                {
-                    var oscConfig = arg.Remove(0, 6).Split(':');
-                    if (oscConfig.Length < 3)
-                    {
-                        Console.WriteLine("Invalid OSC config: " + arg +"\nExpected format: --osc=<OutPort>:<IP>:<InPort>");
-                        break;
-                    }
 
-                    if (!int.TryParse(oscConfig[0], out SendPort))
-                    {
-                        Console.WriteLine("Invalid OSC OutPort: " + oscConfig[0]);
-                        break;
-                    }
-                    
-                    if (!new Regex("^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$").IsMatch(oscConfig[1]))
-                    {
-                        Console.WriteLine("Invalid OSC IP: " + oscConfig[1]);
-                        break;
-                    } 
-                    IP = oscConfig[1];
-                    
-                    if (!int.TryParse(oscConfig[2], out RecievePort))
-                    {
-                        Console.WriteLine("Invalid OSC InPort: " + oscConfig[2]);
-                        break;
-                    }
-                }
-                else if (arg.ToLower().Equals("--disable-eye"))
-                {
-                    EnableEye = false;
-                }
-                else if (arg.ToLower().Equals("--disable-lip"))
-                {
-                    EnableLip = false;
-                }
-            }
-
-            return (SendPort, IP, RecievePort, EnableEye, EnableLip);
+                IP = ip,
+                SendPort = sendPort,
+                ReceivePort = receivePort,
+                EnableEye = !bindingContext.ParseResult.GetValueForOption(_enableEye),
+                EnableExpression = !bindingContext.ParseResult.GetValueForOption(_enableExpression)
+            };
         }
     }
 }

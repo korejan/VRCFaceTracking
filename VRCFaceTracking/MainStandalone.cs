@@ -7,6 +7,7 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows;
 using VRCFaceTracking.Assets.UI;
+using VRCFaceTracking.CommandLine;
 using VRCFaceTracking.OSC;
 
 [assembly: AssemblyTitle("VRCFaceTracking")]
@@ -54,16 +55,13 @@ namespace VRCFaceTracking
             Application.Current?.Shutdown();
         }
         
-        public static void Initialize()
+        public static void Initialize(Arguments args)
         {
             Logger.Msg("VRCFT Initializing!");
-            
-            // Parse Arguments
-            (int outPort, string ip, int inPort, bool enableEye, bool enableLip) = ArgsHandler.HandleArgs();
-            
+
             // Load dependencies
             DependencyManager.Load();
-
+            
             // Ensure OSC is enabled
             if (VRChat.ForceEnableOsc())  // If osc was previously not enabled
             {
@@ -76,11 +74,11 @@ namespace VRCFaceTracking
             }
             
             // Initialize Tracking Runtimes
-            UnifiedLibManager.Initialize(enableEye, enableLip);
+            UnifiedLibManager.Initialize();
 
             // Initialize Locals
             OscMain = new OscMain();
-            var bindResults = OscMain.Bind(ip, outPort, inPort);
+            var bindResults = OscMain.Bind(args.IP, args.SendPort, args.ReceivePort);
             if (!bindResults.receiverSuccess)
                 Logger.Error("Socket failed to bind to receiver port, please ensure it's not already in use by another program or specify a different one instead.");
             
