@@ -4,6 +4,7 @@ using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Threading;
 using VRCFaceTracking;
 using VRCFaceTracking.Params;
@@ -21,10 +22,7 @@ namespace ALVRTrackingInterface
         private bool eyeActive;
         private bool lipActive;
 
-
-        private const int expressionsSize = 63;
-        private byte[] rawExpressions = new byte[expressionsSize * 4 + (8 * 2 * 4)];
-        private float[] expressions = new float[expressionsSize + (8 * 2)];
+        private byte[] rawExpressions = new byte[Marshal.SizeOf<VRCFTPacket>()];
 
         public override (bool SupportsEye, bool SupportsExpression) Supported => (true, true);
 
@@ -143,17 +141,15 @@ namespace ALVRTrackingInterface
                     }
                 }
 
-                // We receive information from the stream as a byte array 63*4 bytes long, since floats are 32 bits long and we have 63 expressions.
-                // We then need to convert this byte array to a float array. Thankfully, this can all be done in a single line of code.
-                Buffer.BlockCopy(rawExpressions, 0, expressions, 0, expressionsSize * 4 + (8 * 2 * 4));
+                var newPacket = VRCFTPacket.ReadPacket(rawExpressions);
 
                 if (eyeActive)
                 {
-                    UpdateEyeData(ref UnifiedTracking.Data.Eye, ref expressions);
-                    UpdateEyeExpressions(ref UnifiedTracking.Data.Shapes, ref expressions);
+                    UpdateEyeData(ref UnifiedTracking.Data.Eye, ref newPacket);
+                    UpdateEyeExpressions(ref UnifiedTracking.Data.Shapes, ref newPacket);
                 }
                 if (lipActive)
-                    UpdateMouthExpressions(ref UnifiedTracking.Data.Shapes, ref expressions);
+                    UpdateMouthExpressions(ref UnifiedTracking.Data.Shapes, ref newPacket);
             }
             catch (SocketException e)
             {
@@ -162,128 +158,155 @@ namespace ALVRTrackingInterface
             }
         }
 
-
-        // Preprocess our expressions per the Meta Documentation
-        private void UpdateEyeData(ref UnifiedEyeData eye, ref float[] expressions)
+        private void UpdateEyeData(ref UnifiedEyeData eye, ref VRCFTPacket packet)
         {
-            #region Eye Data parsing
-
-            eye.Left.Openness = 1.0f - (float)Math.Max(0, Math.Min(1, expressions[(int)FBExpression.Eyes_Closed_L] + // Use eye closed full range
-                expressions[(int)FBExpression.Eyes_Closed_L] * (2f * expressions[(int)FBExpression.Lid_Tightener_L] / Math.Pow(2f, 2f * expressions[(int)FBExpression.Lid_Tightener_L])))); // Add lid tighener as the eye closes to help winking.
-
-            eye.Right.Openness = 1.0f - (float)Math.Max(0, Math.Min(1, expressions[(int)FBExpression.Eyes_Closed_R] + // Use eye closed full range
-                expressions[(int)FBExpression.Eyes_Closed_R] * (2f * expressions[(int)FBExpression.Lid_Tightener_R] / Math.Pow(2f, 2f * expressions[(int)FBExpression.Lid_Tightener_R])))); // Add lid tighener as the eye closes to help winking.
-
-            #endregion
-
-            #region Eye Gaze parsing
-
-            // pitch = 47(left)-- > -47(right)
-            // yaw = -55(down)-- > 43(up)
-            // Eye look angle (degrees) limits calibrated to SRanipal eye tracking
-
-            double q_x = expressions[64];
-            double q_y = expressions[65];
-            double q_z = expressions[66];
-            double q_w = expressions[67];
-
-            double yaw = Math.Atan2(2.0 * (q_y * q_z + q_w * q_x), q_w * q_w - q_x * q_x - q_y * q_y + q_z * q_z);
-            double pitch = Math.Asin(-2.0 * (q_x * q_z - q_w * q_y));
-
-            var pitch_L = (180.0 / Math.PI) * pitch; // from radians
-            var yaw_L = (180.0 / Math.PI) * yaw;
-
-            q_x = expressions[72];
-            q_y = expressions[73];
-            q_z = expressions[74];
-            q_w = expressions[75];
-
-            yaw = Math.Atan2(2.0 * (q_y * q_z + q_w * q_x), q_w * q_w - q_x * q_x - q_y * q_y + q_z * q_z);
-            pitch = Math.Asin(-2.0 * (q_x * q_z - q_w * q_y));
-
-            var pitch_R = (180.0 / Math.PI) * pitch; // from radians
-            var yaw_R = (180.0 / Math.PI) * yaw;
-
-            float eyeLookUpLimit = 43;
-            float eyeLookDownLimit = 55;
-            float eyeLookOutLimit = 47;
-            float eyeLookInLimit = 47;    
-            
-            if (pitch_L > 0)
+            switch (packet.eyeTrackerType)
             {
-                expressions[(int)FBExpression.Eyes_Look_Left_L] = Math.Min(1, (float)(pitch_L / eyeLookOutLimit));
-                expressions[(int)FBExpression.Eyes_Look_Right_L] = 0;
+                case VRFCFTEyeType.FBEyeTrackingSocial:
+                    UpdateEyeDataFB(ref eye, ref packet);
+                    break;
             }
-            else
-            {
-                expressions[(int)FBExpression.Eyes_Look_Left_L] = 0;
-                expressions[(int)FBExpression.Eyes_Look_Right_L] = Math.Min(1, (float)((-pitch_L) / eyeLookInLimit));
-            }
-            if(yaw_L > 0)
-            {
-                expressions[(int)FBExpression.Eyes_Look_Up_L] = Math.Min(1, (float)(yaw_L / eyeLookUpLimit));
-                expressions[(int)FBExpression.Eyes_Look_Down_L] = 0;
-            }
-            else
-            {
-                expressions[(int)FBExpression.Eyes_Look_Up_L] = 0;
-                expressions[(int)FBExpression.Eyes_Look_Down_L] = Math.Min(1, (float)((-yaw_L) / eyeLookDownLimit));
-            }
-
-            if (pitch_R > 0)
-            {
-                expressions[(int)FBExpression.Eyes_Look_Left_R] = Math.Min(1, (float)(pitch_R / eyeLookInLimit));
-                expressions[(int)FBExpression.Eyes_Look_Right_R] = 0;
-            }
-            else
-            {
-                expressions[(int)FBExpression.Eyes_Look_Left_R] = 0;
-                expressions[(int)FBExpression.Eyes_Look_Right_R] = Math.Min(1, (float)((-pitch_R) / eyeLookOutLimit));
-            }
-            if (yaw_R > 0)
-            {
-                expressions[(int)FBExpression.Eyes_Look_Up_R] = Math.Min(1, (float)(yaw_R / eyeLookUpLimit));
-                expressions[(int)FBExpression.Eyes_Look_Down_R] = 0;
-            }
-            else
-            {
-                expressions[(int)FBExpression.Eyes_Look_Up_R] = 0;
-                expressions[(int)FBExpression.Eyes_Look_Down_R] = Math.Min(1, (float)((-yaw_R) / eyeLookDownLimit));
-            }
-
-            #endregion
-
-            #region Eye Data to UnifiedEye
-
-            //Porting of eye tracking parameters
-            eye.Left.Gaze = MakeEye
-            (
-                LookLeft: expressions[(int)FBExpression.Eyes_Look_Left_L],
-                LookRight: expressions[(int)FBExpression.Eyes_Look_Right_L],
-                LookUp: expressions[(int)FBExpression.Eyes_Look_Up_L],
-                LookDown: expressions[(int)FBExpression.Eyes_Look_Down_L]
-            );
-
-            eye.Right.Gaze = MakeEye
-            (
-                LookLeft: expressions[(int)FBExpression.Eyes_Look_Left_R],
-                LookRight: expressions[(int)FBExpression.Eyes_Look_Right_R],
-                LookUp: expressions[(int)FBExpression.Eyes_Look_Up_R],
-                LookDown: expressions[(int)FBExpression.Eyes_Look_Down_R]
-            );
-
-            // Eye dilation code, automated process maybe?
-            eye.Left.PupilDiameter_MM  = 5f;
-            eye.Right.PupilDiameter_MM = 5f;
-
-            // Force the normalization values of Dilation to fit avg. pupil values.
-            eye._minDilation = 0;
-            eye._maxDilation = 10;
-
-            #endregion
         }
 
-        private void UpdateEyeExpressions(ref UnifiedExpressionShape[] unifiedExpressions, ref float[] expressions)
+        private void UpdateEyeExpressions(ref UnifiedExpressionShape[] unifiedExpressions, ref VRCFTPacket packet)
+        {
+            switch (packet.expressionType)
+            {
+                case VRFCFTExpressionType.FB:
+                    UpdateEyeExpressionsFB(ref UnifiedTracking.Data.Shapes, packet.ExpressionWeightSpan);
+                    break;
+            }
+        }
+
+        private void UpdateMouthExpressions(ref UnifiedExpressionShape[] unifiedExpressions, ref VRCFTPacket packet)
+        {
+            switch (packet.expressionType)
+            {
+                case VRFCFTExpressionType.FB:
+                    UpdateEyeExpressionsFB(ref UnifiedTracking.Data.Shapes, packet.ExpressionWeightSpan);
+                    break;
+            }
+        }
+
+        // Preprocess our expressions per the Meta Documentation
+        private void UpdateEyeDataFB(ref UnifiedEyeData eye, ref VRCFTPacket packet)
+        {
+            unsafe
+            {
+                #region Eye Data parsing
+
+                eye.Left.Openness = 1.0f - (float)Math.Max(0, Math.Min(1, packet.expressionWeights[(int)FBExpression.Eyes_Closed_L] + // Use eye closed full range
+                    packet.expressionWeights[(int)FBExpression.Eyes_Closed_L] * (2f * packet.expressionWeights[(int)FBExpression.Lid_Tightener_L] / Math.Pow(2f, 2f * packet.expressionWeights[(int)FBExpression.Lid_Tightener_L])))); // Add lid tighener as the eye closes to help winking.
+
+                eye.Right.Openness = 1.0f - (float)Math.Max(0, Math.Min(1, packet.expressionWeights[(int)FBExpression.Eyes_Closed_R] + // Use eye closed full range
+                    packet.expressionWeights[(int)FBExpression.Eyes_Closed_R] * (2f * packet.expressionWeights[(int)FBExpression.Lid_Tightener_R] / Math.Pow(2f, 2f * packet.expressionWeights[(int)FBExpression.Lid_Tightener_R])))); // Add lid tighener as the eye closes to help winking.
+
+                #endregion
+
+                #region Eye Gaze parsing
+
+                // pitch = 47(left)-- > -47(right)
+                // yaw = -55(down)-- > 43(up)
+                // Eye look angle (degrees) limits calibrated to SRanipal eye tracking
+
+                var q = packet.eyeGazePose0.orientation;
+
+                double yaw = Math.Atan2(2.0 * (q.y * q.z + q.w * q.x), q.w * q.w - q.x * q.x - q.y * q.y + q.z * q.z);
+                double pitch = Math.Asin(-2.0 * (q.x * q.z - q.w * q.y));
+
+                var pitch_L = (180.0 / Math.PI) * pitch; // from radians
+                var yaw_L = (180.0 / Math.PI) * yaw;
+
+                q = packet.eyeGazePose1.orientation;
+
+                yaw = Math.Atan2(2.0 * (q.y * q.z + q.w * q.x), q.w * q.w - q.x * q.x - q.y * q.y + q.z * q.z);
+                pitch = Math.Asin(-2.0 * (q.x * q.z - q.w * q.y));
+
+                var pitch_R = (180.0 / Math.PI) * pitch; // from radians
+                var yaw_R = (180.0 / Math.PI) * yaw;
+
+                float eyeLookUpLimit = 43;
+                float eyeLookDownLimit = 55;
+                float eyeLookOutLimit = 47;
+                float eyeLookInLimit = 47;
+
+                if (pitch_L > 0)
+                {
+                    packet.expressionWeights[(int)FBExpression.Eyes_Look_Left_L] = Math.Min(1, (float)(pitch_L / eyeLookOutLimit));
+                    packet.expressionWeights[(int)FBExpression.Eyes_Look_Right_L] = 0;
+                }
+                else
+                {
+                    packet.expressionWeights[(int)FBExpression.Eyes_Look_Left_L] = 0;
+                    packet.expressionWeights[(int)FBExpression.Eyes_Look_Right_L] = Math.Min(1, (float)((-pitch_L) / eyeLookInLimit));
+                }
+                if (yaw_L > 0)
+                {
+                    packet.expressionWeights[(int)FBExpression.Eyes_Look_Up_L] = Math.Min(1, (float)(yaw_L / eyeLookUpLimit));
+                    packet.expressionWeights[(int)FBExpression.Eyes_Look_Down_L] = 0;
+                }
+                else
+                {
+                    packet.expressionWeights[(int)FBExpression.Eyes_Look_Up_L] = 0;
+                    packet.expressionWeights[(int)FBExpression.Eyes_Look_Down_L] = Math.Min(1, (float)((-yaw_L) / eyeLookDownLimit));
+                }
+
+                if (pitch_R > 0)
+                {
+                    packet.expressionWeights[(int)FBExpression.Eyes_Look_Left_R] = Math.Min(1, (float)(pitch_R / eyeLookInLimit));
+                    packet.expressionWeights[(int)FBExpression.Eyes_Look_Right_R] = 0;
+                }
+                else
+                {
+                    packet.expressionWeights[(int)FBExpression.Eyes_Look_Left_R] = 0;
+                    packet.expressionWeights[(int)FBExpression.Eyes_Look_Right_R] = Math.Min(1, (float)((-pitch_R) / eyeLookOutLimit));
+                }
+                if (yaw_R > 0)
+                {
+                    packet.expressionWeights[(int)FBExpression.Eyes_Look_Up_R] = Math.Min(1, (float)(yaw_R / eyeLookUpLimit));
+                    packet.expressionWeights[(int)FBExpression.Eyes_Look_Down_R] = 0;
+                }
+                else
+                {
+                    packet.expressionWeights[(int)FBExpression.Eyes_Look_Up_R] = 0;
+                    packet.expressionWeights[(int)FBExpression.Eyes_Look_Down_R] = Math.Min(1, (float)((-yaw_R) / eyeLookDownLimit));
+                }
+
+                #endregion
+
+                #region Eye Data to UnifiedEye
+
+                //Porting of eye tracking parameters
+                eye.Left.Gaze = MakeEye
+                (
+                    LookLeft: packet.expressionWeights[(int)FBExpression.Eyes_Look_Left_L],
+                    LookRight: packet.expressionWeights[(int)FBExpression.Eyes_Look_Right_L],
+                    LookUp: packet.expressionWeights[(int)FBExpression.Eyes_Look_Up_L],
+                    LookDown: packet.expressionWeights[(int)FBExpression.Eyes_Look_Down_L]
+                );
+
+                eye.Right.Gaze = MakeEye
+                (
+                    LookLeft: packet.expressionWeights[(int)FBExpression.Eyes_Look_Left_R],
+                    LookRight: packet.expressionWeights[(int)FBExpression.Eyes_Look_Right_R],
+                    LookUp: packet.expressionWeights[(int)FBExpression.Eyes_Look_Up_R],
+                    LookDown: packet.expressionWeights[(int)FBExpression.Eyes_Look_Down_R]
+                );
+
+                // Eye dilation code, automated process maybe?
+                eye.Left.PupilDiameter_MM = 5f;
+                eye.Right.PupilDiameter_MM = 5f;
+
+                // Force the normalization values of Dilation to fit avg. pupil values.
+                eye._minDilation = 0;
+                eye._maxDilation = 10;
+
+                #endregion
+
+            }
+        }
+
+        private void UpdateEyeExpressionsFB(ref UnifiedExpressionShape[] unifiedExpressions, ReadOnlySpan<float> expressions)
         {
             #region Eye Expressions Set
 
@@ -311,7 +334,7 @@ namespace ALVRTrackingInterface
         }
 
         // Thank you @adjerry on the VRCFT discord for these conversions! https://docs.google.com/spreadsheets/d/118jo960co3Mgw8eREFVBsaJ7z0GtKNr52IB4Bz99VTA/edit#gid=0
-        private void UpdateMouthExpressions(ref UnifiedExpressionShape[] unifiedExpressions, ref float[] expressions)
+        private void UpdateMouthExpressionsFB(ref UnifiedExpressionShape[] unifiedExpressions, ReadOnlySpan<float> expressions)
         {
             #region Jaw Expression Set                        
             unifiedExpressions[(int)UnifiedExpressions.JawOpen].Weight = expressions[(int)FBExpression.Jaw_Drop];           
