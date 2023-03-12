@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
@@ -8,6 +9,7 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using VRCFaceTracking;
 using VRCFaceTracking.Params;
+using static DefaultNamespace.FBData;
 
 namespace ALVRTrackingInterface
 {
@@ -64,6 +66,7 @@ namespace ALVRTrackingInterface
                 client = new TcpClient();
                 Logger.Msg($"Trying to establish a Quest Pro connection at {localAddr}:{PORT}...");
 
+                client.NoDelay = true;
                 client.Connect(localAddr, PORT);
                 Logger.Msg("Connected to Quest Pro!");
 
@@ -165,6 +168,9 @@ namespace ALVRTrackingInterface
             case VRFCFTEyeType.FBEyeTrackingSocial:
                 UpdateEyeDataFB(ref eye, ref packet);
                 break;
+            case VRFCFTEyeType.ExtEyeGazeInteraction:
+                UpdateEyeDataEyeGazeEXT(ref eye, ref packet);
+                break;
             }
         }
 
@@ -193,6 +199,44 @@ namespace ALVRTrackingInterface
                 break;
             }
         }
+
+        #region XR_EXT_eye_gaze_interaction Update Function
+        private void UpdateEyeDataEyeGazeEXT(ref UnifiedEyeData eye, ref VRCFTPacket packet)
+        {
+            unsafe
+            {
+                Debug.Assert(packet.eyeTrackerType == VRFCFTEyeType.ExtEyeGazeInteraction);
+
+                #region Eye Data parsing
+                eye.Left.Openness = 1.0f;
+                eye.Right.Openness = 1.0f;
+                #endregion
+
+                #region Eye Data to UnifiedEye
+
+                //Porting of eye tracking parameters
+                eye.Left.Gaze = new Vector2(
+                    packet.eyeGazePose0.position.x,
+                    packet.eyeGazePose0.position.y
+                );
+                eye.Right.Gaze = new Vector2(
+                    packet.eyeGazePose1.position.x,
+                    packet.eyeGazePose1.position.y
+                );
+
+                // Eye dilation code, automated process maybe?
+                eye.Left.PupilDiameter_MM = 5f;
+                eye.Right.PupilDiameter_MM = 5f;
+
+                // Force the normalization values of Dilation to fit avg. pupil values.
+                eye._minDilation = 0;
+                eye._maxDilation = 10;
+
+                #endregion
+
+            }
+        }
+        #endregion
 
         #region HTC Facial Update Functions
         private void UpdateEyeExpressionsHTC(ref UnifiedExpressionShape[] unifiedExpressions, ReadOnlySpan<float> expressionWeights)
