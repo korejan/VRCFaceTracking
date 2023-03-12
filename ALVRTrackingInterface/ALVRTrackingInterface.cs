@@ -276,9 +276,9 @@ namespace ALVRTrackingInterface
             #region Direct Mouth and Lip
 
             // These shapes have overturns subtracting from them, as we are expecting the new standard to have Upper Up / Lower Down baked into the funneller shapes below these.
-            unifiedExpressions[(int)UnifiedExpressions.MouthUpperInnerUpRight].Weight = expressionWeights[(int)XrLipExpressionHTC.MouthUpperUpRight] - expressionWeights[(int)XrLipExpressionHTC.MouthUpperOverturn];
+            unifiedExpressions[(int)UnifiedExpressions.MouthUpperUpRight].Weight = expressionWeights[(int)XrLipExpressionHTC.MouthUpperUpRight] - expressionWeights[(int)XrLipExpressionHTC.MouthUpperOverturn];
             unifiedExpressions[(int)UnifiedExpressions.MouthUpperDeepenRight].Weight = expressionWeights[(int)XrLipExpressionHTC.MouthUpperUpRight] - expressionWeights[(int)XrLipExpressionHTC.MouthUpperOverturn];
-            unifiedExpressions[(int)UnifiedExpressions.MouthUpperInnerUpLeft].Weight = expressionWeights[(int)XrLipExpressionHTC.MouthUpperUpLeft] - expressionWeights[(int)XrLipExpressionHTC.MouthUpperOverturn];
+            unifiedExpressions[(int)UnifiedExpressions.MouthUpperUpLeft].Weight = expressionWeights[(int)XrLipExpressionHTC.MouthUpperUpLeft] - expressionWeights[(int)XrLipExpressionHTC.MouthUpperOverturn];
             unifiedExpressions[(int)UnifiedExpressions.MouthUpperDeepenLeft].Weight = expressionWeights[(int)XrLipExpressionHTC.MouthUpperUpLeft] - expressionWeights[(int)XrLipExpressionHTC.MouthUpperOverturn];
 
             unifiedExpressions[(int)UnifiedExpressions.MouthLowerDownLeft].Weight = expressionWeights[(int)XrLipExpressionHTC.MouthLowerDownLeft] - expressionWeights[(int)XrLipExpressionHTC.MouthLowerOverturn];
