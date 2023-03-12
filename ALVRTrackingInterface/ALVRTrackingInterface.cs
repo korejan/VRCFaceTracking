@@ -162,9 +162,9 @@ namespace ALVRTrackingInterface
         {
             switch (packet.eyeTrackerType)
             {
-                case VRFCFTEyeType.FBEyeTrackingSocial:
-                    UpdateEyeDataFB(ref eye, ref packet);
-                    break;
+            case VRFCFTEyeType.FBEyeTrackingSocial:
+                UpdateEyeDataFB(ref eye, ref packet);
+                break;
             }
         }
 
@@ -172,9 +172,12 @@ namespace ALVRTrackingInterface
         {
             switch (packet.expressionType)
             {
-                case VRFCFTExpressionType.FB:
-                    UpdateEyeExpressionsFB(ref UnifiedTracking.Data.Shapes, packet.ExpressionWeightSpan);
-                    break;
+            case VRFCFTExpressionType.FB:
+                UpdateEyeExpressionsFB(ref UnifiedTracking.Data.Shapes, packet.ExpressionWeightSpan);
+                break;
+            case VRFCFTExpressionType.HTC:
+                UpdateEyeExpressionsHTC(ref UnifiedTracking.Data.Shapes, packet.ExpressionWeightSpan);
+                break;
             }
         }
 
@@ -182,12 +185,132 @@ namespace ALVRTrackingInterface
         {
             switch (packet.expressionType)
             {
-                case VRFCFTExpressionType.FB:
-                    UpdateEyeExpressionsFB(ref UnifiedTracking.Data.Shapes, packet.ExpressionWeightSpan);
-                    break;
+            case VRFCFTExpressionType.FB:
+                UpdateEyeExpressionsFB(ref UnifiedTracking.Data.Shapes, packet.ExpressionWeightSpan);
+                break;
+            case VRFCFTExpressionType.HTC:
+                UpdateMouthExpressionsHTC(ref UnifiedTracking.Data.Shapes, packet.ExpressionWeightSpan.Slice(14)); //packet.expressionWeights.AsSpan(14));
+                break;
             }
         }
 
+        #region HTC Facial Update Functions
+        private void UpdateEyeExpressionsHTC(ref UnifiedExpressionShape[] unifiedExpressions, ReadOnlySpan<float> expressionWeights)
+        {
+            unifiedExpressions[(int)UnifiedExpressions.EyeWideLeft].Weight = expressionWeights[(int)XrEyeExpressionHTC.LeftWide];
+            unifiedExpressions[(int)UnifiedExpressions.EyeWideRight].Weight = expressionWeights[(int)XrEyeExpressionHTC.RightWide];;
+
+            unifiedExpressions[(int)UnifiedExpressions.EyeSquintLeft].Weight = expressionWeights[(int)XrEyeExpressionHTC.LeftSqueeze];;
+            unifiedExpressions[(int)UnifiedExpressions.EyeSquintRight].Weight = expressionWeights[(int)XrEyeExpressionHTC.RightSqueeze];;
+
+            // Emulator expressions for Unified Expressions. These are essentially already baked into Legacy eye expressions (SRanipal)
+            unifiedExpressions[(int)UnifiedExpressions.BrowInnerUpLeft].Weight = expressionWeights[(int)XrEyeExpressionHTC.LeftWide];
+            unifiedExpressions[(int)UnifiedExpressions.BrowOuterUpLeft].Weight = expressionWeights[(int)XrEyeExpressionHTC.LeftWide];
+
+            unifiedExpressions[(int)UnifiedExpressions.BrowInnerUpRight].Weight = expressionWeights[(int)XrEyeExpressionHTC.RightWide];;
+            unifiedExpressions[(int)UnifiedExpressions.BrowOuterUpRight].Weight = expressionWeights[(int)XrEyeExpressionHTC.RightWide];;
+
+            unifiedExpressions[(int)UnifiedExpressions.BrowPinchLeft].Weight = expressionWeights[(int)XrEyeExpressionHTC.LeftSqueeze];;
+            unifiedExpressions[(int)UnifiedExpressions.BrowLowererLeft].Weight = expressionWeights[(int)XrEyeExpressionHTC.LeftSqueeze];;
+
+            unifiedExpressions[(int)UnifiedExpressions.BrowPinchRight].Weight = expressionWeights[(int)XrEyeExpressionHTC.RightSqueeze];;
+            unifiedExpressions[(int)UnifiedExpressions.BrowLowererRight].Weight = expressionWeights[(int)XrEyeExpressionHTC.RightSqueeze];;
+        }
+
+        private void UpdateMouthExpressionsHTC(ref UnifiedExpressionShape[] unifiedExpressions, ReadOnlySpan<float> expressionWeights)
+        {
+            #region Direct Jaw
+
+            unifiedExpressions[(int)UnifiedExpressions.JawOpen].Weight = expressionWeights[(int)XrLipExpressionHTC.JawOpen] + expressionWeights[(int)XrLipExpressionHTC.MouthApeShape];
+            unifiedExpressions[(int)UnifiedExpressions.JawLeft].Weight = expressionWeights[(int)XrLipExpressionHTC.JawLeft];
+            unifiedExpressions[(int)UnifiedExpressions.JawRight].Weight = expressionWeights[(int)XrLipExpressionHTC.JawRight];
+            unifiedExpressions[(int)UnifiedExpressions.JawForward].Weight = expressionWeights[(int)XrLipExpressionHTC.JawForward];
+            unifiedExpressions[(int)UnifiedExpressions.MouthClosed].Weight = expressionWeights[(int)XrLipExpressionHTC.MouthApeShape];
+
+            #endregion
+
+            #region Direct Mouth and Lip
+
+            // These shapes have overturns subtracting from them, as we are expecting the new standard to have Upper Up / Lower Down baked into the funneller shapes below these.
+            unifiedExpressions[(int)UnifiedExpressions.MouthUpperInnerUpRight].Weight = expressionWeights[(int)XrLipExpressionHTC.MouthUpperUpRight] - expressionWeights[(int)XrLipExpressionHTC.MouthUpperOverturn];
+            unifiedExpressions[(int)UnifiedExpressions.MouthUpperDeepenRight].Weight = expressionWeights[(int)XrLipExpressionHTC.MouthUpperUpRight] - expressionWeights[(int)XrLipExpressionHTC.MouthUpperOverturn];
+            unifiedExpressions[(int)UnifiedExpressions.MouthUpperInnerUpLeft].Weight = expressionWeights[(int)XrLipExpressionHTC.MouthUpperUpLeft] - expressionWeights[(int)XrLipExpressionHTC.MouthUpperOverturn];
+            unifiedExpressions[(int)UnifiedExpressions.MouthUpperDeepenLeft].Weight = expressionWeights[(int)XrLipExpressionHTC.MouthUpperUpLeft] - expressionWeights[(int)XrLipExpressionHTC.MouthUpperOverturn];
+
+            unifiedExpressions[(int)UnifiedExpressions.MouthLowerDownLeft].Weight = expressionWeights[(int)XrLipExpressionHTC.MouthLowerDownLeft] - expressionWeights[(int)XrLipExpressionHTC.MouthLowerOverturn];
+            unifiedExpressions[(int)UnifiedExpressions.MouthLowerDownRight].Weight = expressionWeights[(int)XrLipExpressionHTC.MouthLowerDownRight] - expressionWeights[(int)XrLipExpressionHTC.MouthLowerOverturn];
+
+            unifiedExpressions[(int)UnifiedExpressions.LipPuckerUpperLeft].Weight = expressionWeights[(int)XrLipExpressionHTC.MouthPout];
+            unifiedExpressions[(int)UnifiedExpressions.LipPuckerLowerLeft].Weight = expressionWeights[(int)XrLipExpressionHTC.MouthPout];
+            unifiedExpressions[(int)UnifiedExpressions.LipPuckerUpperRight].Weight = expressionWeights[(int)XrLipExpressionHTC.MouthPout];
+            unifiedExpressions[(int)UnifiedExpressions.LipPuckerLowerRight].Weight = expressionWeights[(int)XrLipExpressionHTC.MouthPout];
+
+            unifiedExpressions[(int)UnifiedExpressions.LipFunnelUpperLeft].Weight = expressionWeights[(int)XrLipExpressionHTC.MouthUpperOverturn];
+            unifiedExpressions[(int)UnifiedExpressions.LipFunnelUpperRight].Weight = expressionWeights[(int)XrLipExpressionHTC.MouthUpperOverturn];
+            unifiedExpressions[(int)UnifiedExpressions.LipFunnelLowerLeft].Weight = expressionWeights[(int)XrLipExpressionHTC.MouthUpperOverturn];
+            unifiedExpressions[(int)UnifiedExpressions.LipFunnelLowerRight].Weight = expressionWeights[(int)XrLipExpressionHTC.MouthUpperOverturn];
+
+            unifiedExpressions[(int)UnifiedExpressions.LipSuckUpperLeft].Weight = expressionWeights[(int)XrLipExpressionHTC.MouthUpperInside];
+            unifiedExpressions[(int)UnifiedExpressions.LipSuckUpperRight].Weight = expressionWeights[(int)XrLipExpressionHTC.MouthUpperInside];
+            unifiedExpressions[(int)UnifiedExpressions.LipSuckLowerLeft].Weight = expressionWeights[(int)XrLipExpressionHTC.MouthLowerInside];
+            unifiedExpressions[(int)UnifiedExpressions.LipSuckLowerRight].Weight = expressionWeights[(int)XrLipExpressionHTC.MouthLowerInside];
+
+            unifiedExpressions[(int)UnifiedExpressions.MouthUpperLeft].Weight = expressionWeights[(int)XrLipExpressionHTC.MouthUpperLeft];
+            unifiedExpressions[(int)UnifiedExpressions.MouthUpperRight].Weight = expressionWeights[(int)XrLipExpressionHTC.MouthUpperRight];
+            unifiedExpressions[(int)UnifiedExpressions.MouthLowerLeft].Weight = expressionWeights[(int)XrLipExpressionHTC.MouthLowerLeft];
+            unifiedExpressions[(int)UnifiedExpressions.MouthLowerRight].Weight = expressionWeights[(int)XrLipExpressionHTC.MouthLowerRight];
+
+            unifiedExpressions[(int)UnifiedExpressions.MouthCornerPullLeft].Weight = expressionWeights[(int)XrLipExpressionHTC.MouthSmileLeft];
+            unifiedExpressions[(int)UnifiedExpressions.MouthCornerPullRight].Weight = expressionWeights[(int)XrLipExpressionHTC.MouthSmileRight];
+            unifiedExpressions[(int)UnifiedExpressions.MouthCornerSlantLeft].Weight = expressionWeights[(int)XrLipExpressionHTC.MouthSmileLeft];
+            unifiedExpressions[(int)UnifiedExpressions.MouthCornerSlantRight].Weight = expressionWeights[(int)XrLipExpressionHTC.MouthSmileRight];
+            unifiedExpressions[(int)UnifiedExpressions.MouthFrownLeft].Weight = expressionWeights[(int)XrLipExpressionHTC.MouthSadLeft];
+            unifiedExpressions[(int)UnifiedExpressions.MouthFrownRight].Weight = expressionWeights[(int)XrLipExpressionHTC.MouthSadRight];
+
+            unifiedExpressions[(int)UnifiedExpressions.MouthRaiserUpper].Weight = expressionWeights[(int)XrLipExpressionHTC.MouthLowerOverlay] - expressionWeights[(int)XrLipExpressionHTC.MouthUpperInside];
+            unifiedExpressions[(int)UnifiedExpressions.MouthRaiserLower].Weight = expressionWeights[(int)XrLipExpressionHTC.MouthLowerOverlay];
+
+            #endregion
+
+            #region Direct Cheek
+
+            unifiedExpressions[(int)UnifiedExpressions.CheekPuffLeft].Weight = expressionWeights[(int)XrLipExpressionHTC.CheekPuffLeft];
+            unifiedExpressions[(int)UnifiedExpressions.CheekPuffRight].Weight = expressionWeights[(int)XrLipExpressionHTC.CheekPuffRight];
+
+            unifiedExpressions[(int)UnifiedExpressions.CheekSuckLeft].Weight = expressionWeights[(int)XrLipExpressionHTC.CheekSuck];
+            unifiedExpressions[(int)UnifiedExpressions.CheekSuckRight].Weight = expressionWeights[(int)XrLipExpressionHTC.CheekSuck];
+
+            #endregion
+
+            #region Direct Tongue
+
+            unifiedExpressions[(int)UnifiedExpressions.TongueOut].Weight = (expressionWeights[(int)XrLipExpressionHTC.TongueLongStep1] + expressionWeights[(int)XrLipExpressionHTC.TongueLongStep2]) / 2.0f;
+            unifiedExpressions[(int)UnifiedExpressions.TongueUp].Weight = expressionWeights[(int)XrLipExpressionHTC.TongueUp];
+            unifiedExpressions[(int)UnifiedExpressions.TongueDown].Weight = expressionWeights[(int)XrLipExpressionHTC.TongueDown];
+            unifiedExpressions[(int)UnifiedExpressions.TongueLeft].Weight = expressionWeights[(int)XrLipExpressionHTC.TongueLeft];
+            unifiedExpressions[(int)UnifiedExpressions.TongueRight].Weight = expressionWeights[(int)XrLipExpressionHTC.TongueRight];
+            unifiedExpressions[(int)UnifiedExpressions.TongueRoll].Weight = expressionWeights[(int)XrLipExpressionHTC.TongueRoll];
+
+            #endregion
+
+            // These shapes are not tracked at all by SRanipal, but instead are being treated as enhancements to driving the shapes above.
+
+            #region Emulated Unified Mapping
+
+            unifiedExpressions[(int)UnifiedExpressions.CheekSquintLeft].Weight = expressionWeights[(int)XrLipExpressionHTC.MouthSmileLeft];
+            unifiedExpressions[(int)UnifiedExpressions.CheekSquintRight].Weight = expressionWeights[(int)XrLipExpressionHTC.MouthSmileRight];
+
+            unifiedExpressions[(int)UnifiedExpressions.MouthDimpleLeft].Weight = expressionWeights[(int)XrLipExpressionHTC.MouthSmileLeft];
+            unifiedExpressions[(int)UnifiedExpressions.MouthDimpleRight].Weight = expressionWeights[(int)XrLipExpressionHTC.MouthSmileRight];
+
+            unifiedExpressions[(int)UnifiedExpressions.MouthStretchLeft].Weight = expressionWeights[(int)XrLipExpressionHTC.MouthSadRight];
+            unifiedExpressions[(int)UnifiedExpressions.MouthStretchRight].Weight = expressionWeights[(int)XrLipExpressionHTC.MouthSadRight];
+
+            #endregion
+        }
+        #endregion
+
+        #region FB Eye & Facial Update Functions   
         // Preprocess our expressions per the Meta Documentation
         private void UpdateEyeDataFB(ref UnifiedEyeData eye, ref VRCFTPacket packet)
         {
@@ -419,6 +542,7 @@ namespace ALVRTrackingInterface
 
         private Vector2 MakeEye(float LookLeft, float LookRight, float LookUp, float LookDown) =>
             new Vector2(LookRight - LookLeft, LookUp - LookDown);
+        #endregion
 
         public override void Teardown()
         {
