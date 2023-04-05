@@ -1,5 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using ALVRTrackingInterface.UI;
+using System;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
 using System.Net;
@@ -7,25 +8,34 @@ using System.Net.Sockets;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Threading;
+using System.Threading.Tasks;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Media;
+
 using VRCFaceTracking;
 using VRCFaceTracking.Params;
-using static DefaultNamespace.FBData;
 
 namespace ALVRTrackingInterface
 {
-    public class ALVRTrackingInterface : ExtTrackingModule
-    {
-        public IPAddress localAddr;
-        public int PORT = 13191;
+    using RunAction = Action<System.Threading.CancellationToken>;
 
-        private TcpClient client;
-        private NetworkStream stream;
-        private bool connected = false;
+    public sealed class ALVRTrackingInterface : ExtTrackingModule
+    {
+        public const int PORT = 13191;
+
         private bool eyeActive;
         private bool lipActive;
 
-        private byte[] rawExpressions = new byte[Marshal.SizeOf<VRCFTPacket>()];
+        private CancellationTokenSource runTokenSource = new CancellationTokenSource();
+        private ManualResetEvent exitEvent = new ManualResetEvent(true);
 
+        private ConfigControl configControl;
+
+        private static readonly string[] ALXRLogTag = new string[] { "[LibALXR]", "[ALXR-client]" };
+
+        
         public override (bool SupportsEye, bool SupportsExpression) Supported => (true, true);
 
         public override (bool eyeSuccess, bool expressionSuccess) Initialize(bool eyeAvailable, bool expressionAvailable)
@@ -34,178 +44,413 @@ namespace ALVRTrackingInterface
             // Will allow other modules such as SRanipal to overlap should we want that (in the case of using the Facial Tracker in place of the Quest's lip tracker).
             eyeActive = eyeAvailable;
             lipActive = expressionAvailable;
-
-            string configPath = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "questProIP.txt");
-            Logger.Error(configPath);
-            if (!File.Exists(configPath))
-            {
-                Logger.Msg("Failed to find config JSON! A questProIP.txt file has been generated, please configure your Quest Pro's IP address into this text file.");
-                File.WriteAllText(configPath, "192.168.254.254");
-                return (false, false);
-            }
-
-            string text = File.ReadAllText(configPath).Trim();
-
-            if (!IPAddress.TryParse(text, out localAddr))
-            {
-                Logger.Error("The IP provided in questProIP.txt is not valid. Please check the file and try again.");
-                return (false, false);
-            }
-
-            // Initialize server first before continuing.
-            if (!ConnectToTCP())
-                return (false, false);
+            
+            LoadConfigControl();
 
             return (eyeActive, lipActive);
         }
 
-        private bool ConnectToTCP()
+        private void LoadConfigControl()
+        {
+            var configUITask = Application.Current.Dispatcher.InvokeAsync(new Func<RunConfig>(() =>
+            {
+                var mainWindow = Application.Current.MainWindow;
+                if (mainWindow == null)
+                {
+                    Logger.Error("Failed to find main application window!");
+                    return null;
+                }
+
+                var tabControl = UI.UIHelper.FindTabControl(mainWindow);
+                if (tabControl == null)
+                {
+                    Logger.Error("Failed to find main application tab control!");
+                    return null;
+                }
+
+                configControl = new ConfigControl();
+                configControl.LoadConfig();
+
+                configControl.ConnectToClientClick += ConfigControl_ConnectToClientClick;
+                configControl.RunALXRClientClick += ConfigControl_RunALXRClientClick;
+                configControl.StopRunTaskClick += ConfigControl_StopRunTaskClick;
+
+                var newTabItem = new TabItem();
+                if (tabControl.Items.Count > 0)
+                {
+                    var mainTab = tabControl.Items[0] as TabItem;
+                    if (mainTab != null) {
+                        Debug.Assert((mainTab.Header as string).ToLower() == "main");
+                        newTabItem.Style = new Style(typeof(TabItem), mainTab.Style);
+                        newTabItem.Foreground = mainTab.Foreground;
+                    }
+                }
+                newTabItem.Header = "ALXR Module Config";
+                newTabItem.Content = configControl;
+                tabControl.Items.Add(newTabItem);
+
+                return configControl.RunConfig;
+            }));
+            configUITask.Wait();
+            var runConfig = configUITask.Result;
+            SetRunAction(GetRunAction(runConfig));
+        }
+
+        private RunAction GetRunAction(RunConfig runConfig)
+        {
+            if (runConfig == null)
+                return null;
+            switch (runConfig.RunMethod)
+            {
+                case RunMethod.ALXRClient:
+                    var alxrClientConfig = runConfig.ALXRClientConfig;
+                    return tok => RemoteRun(alxrClientConfig, tok);
+                case RunMethod.LibALXR:
+                    var libALXRConfig = runConfig.LibALXRConfig;
+                    return tok => LocalRun(libALXRConfig, tok);
+                default: return null;
+            }
+        }
+
+        private void ConfigControl_StopRunTaskClick(object sender, RoutedEventArgs e) => CancelRunAction();
+
+        private void ConfigControl_RunALXRClientClick(object sender, RoutedEventArgs e)
+        {
+            Debug.Assert(configControl != null);
+            var libALXRConfig = configControl.LibALXRConfig;
+            SetRunAction(tok => LocalRun(libALXRConfig, tok));
+            SwitchToMainTab();
+        }
+
+        private void ConfigControl_ConnectToClientClick(object sender, RoutedEventArgs e)
+        {
+            Debug.Assert(configControl != null);
+            var alxrClientConfig = configControl.ALXRClientConfig;
+            SetRunAction(tok => RemoteRun(alxrClientConfig, tok));
+            SwitchToMainTab();
+        }
+
+        private void SwitchToMainTab() => UIHelper.SwitchToMainTab(configControl);
+
+        private bool SetRunAction(RunAction newAction)
+        {
+            if (newAction == null)
+                return false;
+            CancelRunAction();
+            runTokenSource = new CancellationTokenSource();
+            exitEvent.Reset();
+            runQueue.Add(newAction);
+            return true;
+        }
+
+        private void CancelRunAction()
+        {
+            runTokenSource.Cancel();
+            if (!exitEvent.WaitOne(5000))
+            {
+                Logger.Warning("Waiting for current task to finish took to long.");
+            }
+        }
+
+        #region LocalRun (LibALXR)
+        private static ALXRRustCtx CreateALXRCtx(ref LibALXRConfig config)
+        {
+            return new ALXRRustCtx
+            {
+                inputSend = (ref TrackingInfo data) => { },
+                viewsConfigSend = (ref ALXREyeInfo eyeInfo) => { },
+                pathStringToHash = (path) => { return (ulong)path.GetHashCode(); },
+                timeSyncSend = (ref TimeSync data) => { },
+                videoErrorReportSend = () => { },
+                batterySend = (a, b, c) => { },
+                setWaitingNextIDR = a => { },
+                requestIDR = () => { },
+                graphicsApi = config.GraphicsApi,
+                decoderType = ALXRDecoderType.D311VA,
+                displayColorSpace = ALXRColorSpace.Quest,
+#if DEBUG
+                verbose = true,
+#else
+                verbose = config.VerboseLogs,
+#endif
+                disableLinearizeSrgb = false,
+                noSuggestedBindings = true,
+                noServerFramerateLock = false,
+                noFrameSkip = false,
+                disableLocalDimming = true,
+                headlessSession = config.HeadlessSession,
+                noFTServer = true,
+                firmwareVersion = new ALXRVersion
+                {
+                    // only relevant for android clients.
+                    major = 0,
+                    minor = 0,
+                    patch = 0
+                }
+            };
+        }
+
+        private void LocalRun(LibALXRConfig config, CancellationToken cancellationToken)
+        {
+            if (!LibALXR.AddDllSearchPath())
+            {
+                Logger.Error($"{ALXRLogTag[0]} libalxr library path to search failed to be set.");
+                return;
+            }
+
+            try
+            {
+                LibALXR.alxr_set_log_custom_output(ALXRLogOptions.None, (level, output, len) =>
+                {
+                    var fullMsg = $"{ALXRLogTag[0]} {output}";
+                    switch (level)
+                    {
+                        case ALXRLogLevel.Info:
+                            Logger.Msg(fullMsg);
+                            break;
+                        case ALXRLogLevel.Warning:
+                            Logger.Warning(fullMsg);
+                            break;
+                        case ALXRLogLevel.Error:
+                            Logger.Error(fullMsg);
+                            break;
+                    }
+                });
+
+                while (!cancellationToken.IsCancellationRequested)
+                {
+                    var ctx = CreateALXRCtx(ref config);
+                    var sysProperties = new ALXRSystemProperties();
+                    if (!LibALXR.alxr_init(ref ctx, out sysProperties))
+                    {
+                        break;
+                    }
+
+                    var newPacket = new ALXRFacialEyePacket();
+                    var processFrameResult = new ALXRProcessFrameResult
+                    {
+                        exitRenderLoop = false,
+                        requestRestart = false,
+                    };
+                    unsafe
+                    {
+                        processFrameResult.newPacket = &newPacket;
+                    }
+                    while (!cancellationToken.IsCancellationRequested)
+                    {
+                        processFrameResult.exitRenderLoop = false;
+                        LibALXR.alxr_process_frame2(ref processFrameResult);
+                        if (processFrameResult.exitRenderLoop)
+                        {
+                            break;
+                        }
+                        
+                        unsafe
+                        {
+                            UpdateData(ref *processFrameResult.newPacket);
+                        }
+
+                        if (!LibALXR.alxr_is_session_running())
+                        {
+                            // Throttle loop since xrWaitFrame won't be called.
+                            Thread.Sleep(250);
+                        }
+                    }
+
+                    LibALXR.alxr_destroy();
+
+                    if (!processFrameResult.requestRestart)
+                    {
+                        break;
+                    }
+                }
+            }
+            finally
+            {
+                LibALXR.alxr_destroy();
+            }
+        }
+        #endregion
+
+        #region RemoteRun (Any ALXR Client)
+        private static async Task<TcpClient> ConnectToServerAsync(IPAddress localAddr, int port, CancellationToken cancellationToken)
+        {
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                try
+                {
+                    var client = new TcpClient();
+                    client.NoDelay = true;
+                    Logger.Msg($"{ALXRLogTag[1]} Attempting to establish a connection at {localAddr}:{port}...");
+                    await client.ConnectAsync(localAddr, port).WithCancellation(cancellationToken);
+                    Logger.Msg($"{ALXRLogTag[1]} Successfully connected to ALXR client: {localAddr}:{port}");
+                    return client;
+                }
+                catch (Exception ex) when (!(ex is OperationCanceledException) && !(ex is ObjectDisposedException))
+                {
+                    Logger.Error($"{ALXRLogTag[1]} Error connecting to {localAddr}:{port}: {ex.Message}");
+                }
+                await Task.Delay(1000, cancellationToken);
+            }
+            return null;
+        }
+
+        private byte[] rawExprBuffer = new byte[Marshal.SizeOf<ALXRFacialEyePacket>()];
+        private async Task<ALXRFacialEyePacket> ReadALXRFacialEyePacketAsync(NetworkStream stream, System.Threading.CancellationToken cancellationToken)
+        {
+            Debug.Assert(stream != null && stream.CanRead);
+            
+            int offset = 0;
+            int readBytes = 0;
+            do
+            {
+                readBytes = await stream.ReadAsync(rawExprBuffer, offset, rawExprBuffer.Length - offset, cancellationToken);
+                offset += readBytes;
+            }
+            while (readBytes > 0 && offset < rawExprBuffer.Length &&
+                    !cancellationToken.IsCancellationRequested);
+
+            if (offset < rawExprBuffer.Length)
+                throw new Exception("Failed read packet.");
+            return ALXRFacialEyePacket.ReadPacket(rawExprBuffer);
+
+        }
+
+        private void RemoteRun(ALXRClientConfig config, CancellationToken cToken)
         {
             try
             {
-                client = new TcpClient();
-                Logger.Msg($"Trying to establish a Quest Pro connection at {localAddr}:{PORT}...");
+                var clientAddress = config.ClientIpAddress;
+                if (clientAddress == null)
+                {
+                    Logger.Error($"{ALXRLogTag[1]} client IP address is null or invalid.");
+                    return;
+                }
 
-                client.NoDelay = true;
-                client.Connect(localAddr, PORT);
-                Logger.Msg("Connected to Quest Pro!");
+                Task.Run(async () =>
+                {
+                    while (!cToken.IsCancellationRequested)
+                    {
+                        try
+                        {
+                            using (var newTcpClient = await ConnectToServerAsync(clientAddress, PORT, cToken))
+                            {
+                                if (newTcpClient == null || !newTcpClient.Connected)
+                                    throw new Exception($"Error connecting to {clientAddress}:{PORT}");
 
-                stream = client.GetStream();
-                connected = true;
+                                using (var stream = newTcpClient.GetStream())
+                                {
+                                    if (stream == null)
+                                        throw new Exception($"Error connecting to {clientAddress}:{PORT}");
 
-                return true;
+                                    while (!cToken.IsCancellationRequested && stream.CanRead)
+                                    {
+                                        var newPacket = await ReadALXRFacialEyePacketAsync(stream, cToken);
+                                        UpdateData(ref newPacket);
+                                    }
+                                }
+                            }
+                        }
+                        catch (Exception e)
+                        {
+                            Logger.Error($"{ALXRLogTag[1]} {e.Message}");
+                            Logger.Warning($"{ALXRLogTag[1]} End of stream!");
+                        }
+                    }
+                }, cToken).Wait();
             }
             catch (Exception e)
             {
-                Logger.Error(e.Message);
+                Logger.Error($"{ALXRLogTag[1]} {e.Message}");
             }
-
-            return false;
         }
+        #endregion
 
+        private readonly BlockingCollection<RunAction> runQueue = new BlockingCollection<RunAction>(1);
+        private CancellationTokenSource runQueueTokenSource = new CancellationTokenSource();
 
         public override Action GetUpdateThreadFunc()
         {
             return () =>
             {
-                while (true)
+                try
                 {
-                    Update();
-                    //Thread.Sleep(10); // blocked by IO
+                    foreach (var RunFn in runQueue.GetConsumingEnumerable(runQueueTokenSource.Token))
+                    {
+                        try
+                        {
+                            Debug.Assert(RunFn != null);
+                            RunFn(runTokenSource.Token);
+                        }
+                        finally
+                        {
+                            exitEvent.Set();
+                        }
+                    }
                 }
+                catch (OperationCanceledException) { }
+                catch (ObjectDisposedException) { }
             };
         }
 
-        private void Update()
+        #region UpdateData Functions
+
+        private void UpdateData(ref ALXRFacialEyePacket newPacket)
         {
-            try
+            if (eyeActive)
             {
-                // Attempt reconnection if needed
-                if (!connected || stream == null)
-                {
-                    ConnectToTCP();
-                }
-
-                if (stream == null)
-                {
-                    Logger.Warning("Can't read from network stream just yet! Trying again soon...");
-                    return;
-                }
-
-                if (!stream.CanRead)
-                {
-                    Logger.Warning("Can't read from network stream just yet! Trying again soon...");
-                    return;
-                }
-
-                int offset = 0;
-                int readBytes;
-                do
-                {
-                    readBytes = stream.Read(rawExpressions, offset, rawExpressions.Length - offset);
-                    offset += readBytes;
-                }
-                while (readBytes > 0 && offset < rawExpressions.Length);
-
-                if (offset < rawExpressions.Length && connected)
-                {
-                    // TODO Reconnect to the server if we lose connection
-                    Logger.Warning("End of stream! Reconnecting...");
-                    Thread.Sleep(1000);
-                    connected = false;
-                    try
-                    {
-                        stream.Close();
-                    }
-                    catch (SocketException e)
-                    {
-                        Logger.Error(e.Message);
-                        Thread.Sleep(1000);
-                    }
-                }
-
-                var newPacket = VRCFTPacket.ReadPacket(rawExpressions);
-
-                if (eyeActive)
-                {
-                    UpdateEyeData(ref UnifiedTracking.Data.Eye, ref newPacket);
-                    UpdateEyeExpressions(ref UnifiedTracking.Data.Shapes, ref newPacket);
-                }
-                if (lipActive)
-                    UpdateMouthExpressions(ref UnifiedTracking.Data.Shapes, ref newPacket);
+                UpdateEyeData(ref UnifiedTracking.Data.Eye, ref newPacket);
+                UpdateEyeExpressions(ref UnifiedTracking.Data.Shapes, ref newPacket);
             }
-            catch (SocketException e)
-            {
-                Logger.Error(e.Message);
-                Thread.Sleep(1000);
-            }
+            if (lipActive)
+                UpdateMouthExpressions(ref UnifiedTracking.Data.Shapes, ref newPacket);
         }
 
-        private void UpdateEyeData(ref UnifiedEyeData eye, ref VRCFTPacket packet)
+        private void UpdateEyeData(ref UnifiedEyeData eye, ref ALXRFacialEyePacket packet)
         {
             switch (packet.eyeTrackerType)
             {
-            case VRFCFTEyeType.FBEyeTrackingSocial:
+            case ALXREyeTrackingType.FBEyeTrackingSocial:
                 UpdateEyeDataFB(ref eye, ref packet);
                 break;
-            case VRFCFTEyeType.ExtEyeGazeInteraction:
+            case ALXREyeTrackingType.ExtEyeGazeInteraction:
                 UpdateEyeDataEyeGazeEXT(ref eye, ref packet);
                 break;
             }
         }
 
-        private void UpdateEyeExpressions(ref UnifiedExpressionShape[] unifiedExpressions, ref VRCFTPacket packet)
+        private void UpdateEyeExpressions(ref UnifiedExpressionShape[] unifiedExpressions, ref ALXRFacialEyePacket packet)
         {
             switch (packet.expressionType)
             {
-            case VRFCFTExpressionType.FB:
+            case ALXRFacialExpressionType.FB:
                 UpdateEyeExpressionsFB(ref UnifiedTracking.Data.Shapes, packet.ExpressionWeightSpan);
                 break;
-            case VRFCFTExpressionType.HTC:
+            case ALXRFacialExpressionType.HTC:
                 UpdateEyeExpressionsHTC(ref UnifiedTracking.Data.Shapes, packet.ExpressionWeightSpan);
                 break;
             }
         }
 
-        private void UpdateMouthExpressions(ref UnifiedExpressionShape[] unifiedExpressions, ref VRCFTPacket packet)
+        private void UpdateMouthExpressions(ref UnifiedExpressionShape[] unifiedExpressions, ref ALXRFacialEyePacket packet)
         {
             switch (packet.expressionType)
             {
-            case VRFCFTExpressionType.FB:
+            case ALXRFacialExpressionType.FB:
                 UpdateEyeExpressionsFB(ref UnifiedTracking.Data.Shapes, packet.ExpressionWeightSpan);
                 break;
-            case VRFCFTExpressionType.HTC:
+            case ALXRFacialExpressionType.HTC:
                 UpdateMouthExpressionsHTC(ref UnifiedTracking.Data.Shapes, packet.ExpressionWeightSpan.Slice(14)); //packet.expressionWeights.AsSpan(14));
                 break;
             }
         }
 
         #region XR_EXT_eye_gaze_interaction Update Function
-        private void UpdateEyeDataEyeGazeEXT(ref UnifiedEyeData eye, ref VRCFTPacket packet)
+        private void UpdateEyeDataEyeGazeEXT(ref UnifiedEyeData eye, ref ALXRFacialEyePacket packet)
         {
             unsafe
             {
-                Debug.Assert(packet.eyeTrackerType == VRFCFTEyeType.ExtEyeGazeInteraction);
+                Debug.Assert(packet.eyeTrackerType == ALXREyeTrackingType.ExtEyeGazeInteraction);
 
                 #region Eye Data parsing
                 eye.Left.Openness = 1.0f;
@@ -356,7 +601,7 @@ namespace ALVRTrackingInterface
 
         #region FB Eye & Facial Update Functions   
         // Preprocess our expressions per the Meta Documentation
-        private void UpdateEyeDataFB(ref UnifiedEyeData eye, ref VRCFTPacket packet)
+        private void UpdateEyeDataFB(ref UnifiedEyeData eye, ref ALXRFacialEyePacket packet)
         {
             unsafe
             {
@@ -587,20 +832,29 @@ namespace ALVRTrackingInterface
         private Vector2 MakeEye(float LookLeft, float LookRight, float LookUp, float LookDown) =>
             new Vector2(LookRight - LookLeft, LookUp - LookDown);
         #endregion
+        
+        #endregion
 
         public override void Teardown()
         {
             Logger.Msg("Tearing down ALVR client server...");
             try
             {
-                stream.Close();
+                CancelRunAction();
+                runQueueTokenSource.Cancel();
+                runQueue.CompleteAdding();
+
             }
-            catch (SocketException e)
+            catch (Exception e)
             {
                 Logger.Error(e.Message);
                 Thread.Sleep(1000);
             }
-
+            finally
+            {
+                if (configControl != null)
+                    configControl.SaveConfig();
+            }
             Logger.Msg("ALVR module successfully disposed resources!");
         }
     }
