@@ -17,7 +17,7 @@
                 </Style.Resources>
             </Style>
         </Grid.Resources>
-        <GroupBox Header="ALXR Client" Margin="10,65,0,0" HorizontalAlignment="Left" VerticalAlignment="Top" Height="65" Width="402" Foreground="White">
+        <GroupBox Header="Remote (ALXR Client)" Margin="10,210,0,0" HorizontalAlignment="Left" VerticalAlignment="Top" Height="65" Width="402" Foreground="White">
             <Grid>
                 <ALXRControls:IPAddressControl x:Name="ClientIPAddressControl" HorizontalAlignment="Left" Margin="223,14,0,0" VerticalAlignment="Top" Width="121"/>
                 <Label Content="IP Address:" HorizontalAlignment="Left" Margin="155,10,0,0" VerticalAlignment="Top" Foreground="#FFE8E8E8" Width="72" ToolTip="IP Address of Headset/Client" />
@@ -25,14 +25,14 @@
                 <Button x:Name="resetButton" Content="Reset" HorizontalAlignment="Left" Margin="344,13,0,0" VerticalAlignment="Top" Width="40" Click="resetButton_Click" RenderTransformOrigin="0.975,3.76"/>
             </Grid>
         </GroupBox>
-        <GroupBox Header="On Start-up Run:" Foreground="White" Margin="10,10,0,0" HorizontalAlignment="Left" VerticalAlignment="Top" Height="50" Width="275">
+        <GroupBox Header="On Start-up Run:" Foreground="White" Margin="10,10,0,0" HorizontalAlignment="Left" VerticalAlignment="Top" Height="50" Width="402">
             <StackPanel Orientation="Horizontal">
-                <RadioButton x:Name="LibALXRRadioButton" Content="LibALXR" Foreground="White" Margin="4,0,4,0" Width="84" VerticalAlignment="Center" IsChecked="True" GroupName="OnStartUp"/>
-                <RadioButton x:Name="ALXRClientRadioButton" Content="ALXR Client" Foreground="White" Margin="4,0,4,0" Width="98" VerticalAlignment="Center" GroupName="OnStartUp"/>
-                <RadioButton x:Name="NoRunOnStartupRadioButton" Content="None" Foreground="White" Margin="4,0,4,0" Width="59" VerticalAlignment="Center" IsChecked="False" GroupName="OnStartUp"/>
+                <RadioButton x:Name="LibALXRRadioButton" Content="Local (LibALXR)" Foreground="White" Margin="4,0,4,0" Width="120" VerticalAlignment="Center" IsChecked="True" GroupName="OnStartUp"/>
+                <RadioButton x:Name="ALXRClientRadioButton" Content="Remote (ALXR Client)" Foreground="White" Margin="4,0,4,0" Width="150" VerticalAlignment="Center" GroupName="OnStartUp"/>
+                <RadioButton x:Name="NoRunOnStartupRadioButton" Content="None" Foreground="White" Margin="4,0,4,0" Width="96" VerticalAlignment="Center" IsChecked="False" GroupName="OnStartUp"/>
             </StackPanel>
         </GroupBox>
-        <GroupBox Header="LibALXR" Margin="10,135,0,0" Foreground="White" HorizontalAlignment="Left" VerticalAlignment="Top" Height="130" Width="402">
+        <GroupBox Header="Local (LibALXR)" Margin="10,70,0,0" Foreground="White" HorizontalAlignment="Left" VerticalAlignment="Top" Height="130" Width="402">
             <Grid>
                 <CheckBox x:Name="VerboseLogsCheckBox" Content="Verbose Logs" Style="{StaticResource ArabicStyle}" HorizontalAlignment="Left" Margin="255,32,0,0" VerticalAlignment="Top" Foreground="White" Width="116" FlowDirection="RightToLeft" />
                 <Label Content="Graphics API:" HorizontalAlignment="Left" Margin="10,71,0,0" VerticalAlignment="Top" Foreground="White" Width="92" HorizontalContentAlignment="Right" ToolTip="Note this setting will be ignored, if &quot;Headless Session&quot; is checked and the active OpenXR runtime supports it."/>
@@ -45,7 +45,7 @@
                 </ComboBox>
                 <Button x:Name="RunLibALXRButton" Content="Run" HorizontalAlignment="Left" Height="21" Margin="244,76,0,0" VerticalAlignment="Top" Width="138" BorderThickness="1,1,1,1" Click="RunLibALXRButton_Click" />
                 <CheckBox x:Name="HandTrackingCheckBox" Content="Hand Tracking" Style="{StaticResource ArabicStyle}" HorizontalAlignment="Left" Margin="255,10,0,0" VerticalAlignment="Top" Foreground="White" Width="116" Height="17" FlowDirection="RightToLeft"/>
-                <ComboBox x:Name="FacialTrackingComboBox" HorizontalAlignment="Left" Margin="107,43,0,0" VerticalAlignment="Top" Width="120" SelectedIndex="3" IsReadOnly="True">
+                <ComboBox x:Name="FacialTrackingComboBox" HorizontalAlignment="Left" Margin="107,43,0,0" VerticalAlignment="Top" Width="120" SelectedIndex="4" IsReadOnly="True">
                     <ComboBoxItem Content="Off"/>
                     <ComboBoxItem Content="XR_FB_face_tracking" ToolTip="Quest Pro"/>
                     <ComboBoxItem Content="XR_HTC_facial_tracking" ToolTip="Vive Facial Tracker, Focus 3/XR Elite Facial Tracker Module"/>
@@ -63,10 +63,10 @@
                 <CheckBox x:Name="HeadlessCheckBox" Content="Headless Session" Style="{StaticResource ArabicStyle}" HorizontalAlignment="Left" Margin="255,52,0,0" VerticalAlignment="Top" Foreground="White" Width="116" FlowDirection="RightToLeft" IsChecked="True" ToolTip="If checked and the active OpenXR runtime supports XR_MND_Headless, enables an OpenXR headless session. No graphics sub-system will be initialized (&quot;Graphics API&quot; setting is ignored) thus less resources will be used and only tracking data is obtained/sent. Prefer to keep this on for future updates, only disable this if you have any issues." Padding="4,-1,-1,0"/>
             </Grid>
         </GroupBox>
-        <StackPanel Margin="10,282,0,0" Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Top" Width="402">
+        <StackPanel Margin="10,290,0,0" Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Top" Width="402">
             <Button x:Name="StopButton" Content="Stop / Disconnect" Height="22" Width="126" BorderThickness="1,1,1,1" Margin="5,0,5,0" Click="StopButton_Click" />
-            <Button x:Name="ResetButton" Content="Reset" Height="22" Width="124" BorderThickness="1,1,1,1" Margin="5,0,5,0" Click="ResetButton_Click_1" />
-            <Button x:Name="SaveButton" Content="Save" Height="22" Width="124" BorderThickness="1,1,1,1" Margin="5,0,5,0" Click="SaveButton_Click" />
+            <Button x:Name="ResetButton" Content="Reset All" Height="22" Width="124" BorderThickness="1,1,1,1" Margin="5,0,5,0" Click="ResetButton_Click_1" />
+            <Button x:Name="SaveButton" Content="Save All" Height="22" Width="124" BorderThickness="1,1,1,1" Margin="5,0,5,0" Click="SaveButton_Click" />
         </StackPanel>
     </Grid>
 </UserControl>
