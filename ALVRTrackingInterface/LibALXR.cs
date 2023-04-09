@@ -145,6 +145,7 @@ namespace ALVRTrackingInterface
         Quest = 5,
         P3 = 6,
         AdobeRgb = 7,
+        Default = Quest,
         MaxEnum = 0x7fffffff
     }
 
@@ -202,6 +203,9 @@ namespace ALVRTrackingInterface
         public ALXRDecoderType decoderType;
         public ALXRColorSpace displayColorSpace;
 
+        public ALXRFacialExpressionType facialTracking;
+        public ALXREyeTrackingType eyeTracking;
+
         [MarshalAs(UnmanagedType.U1)]
         public bool verbose;
         [MarshalAs(UnmanagedType.U1)]
@@ -218,6 +222,10 @@ namespace ALVRTrackingInterface
         public bool headlessSession;
         [MarshalAs(UnmanagedType.U1)]
         public bool noFTServer;
+        [MarshalAs(UnmanagedType.U1)]
+        public bool noPassthrough;
+        [MarshalAs(UnmanagedType.U1)]
+        public bool noHandTracking;
 
 #if XR_USE_PLATFORM_ANDROID
         public IntPtr applicationVM;

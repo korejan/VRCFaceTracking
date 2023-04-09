@@ -49,6 +49,7 @@
                     <ComboBoxItem Content="Off"/>
                     <ComboBoxItem Content="XR_FB_face_tracking" ToolTip="Quest Pro"/>
                     <ComboBoxItem Content="XR_HTC_facial_tracking" ToolTip="Vive Facial Tracker, Focus 3/XR Elite Facial Tracker Module"/>
+                    <ComboBoxItem Content="Pico (No supported Yet!)"/>
                     <ComboBoxItem Content="Auto" ToolTip="Auto selects which ever extension is available, from vendor specific to multi-vendor extensions"/>
                 </ComboBox>
                 <Label Content="Facial Tracking:" HorizontalAlignment="Left" Margin="10,41,0,0" VerticalAlignment="Top" Width="92" Foreground="White" HorizontalContentAlignment="Right"/>

@@ -60,8 +60,8 @@ namespace ALVRTrackingInterface.UI
             EnableHandleTracking = false,
             HeadlessSession = true,
             GraphicsApi = ALXRGraphicsApi.Auto,
-            EyeTrackingExt = ALXREyeTrackingType.None,
-            FacialTrackingExt = ALXRFacialExpressionType.None
+            EyeTrackingExt = ALXREyeTrackingType.Auto,
+            FacialTrackingExt = ALXRFacialExpressionType.Auto
         };
 
         public string ToJsonString() =>

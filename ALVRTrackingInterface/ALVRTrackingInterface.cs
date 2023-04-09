@@ -167,12 +167,10 @@ namespace ALVRTrackingInterface
                 requestIDR = () => { },
                 graphicsApi = config.GraphicsApi,
                 decoderType = ALXRDecoderType.D311VA,
-                displayColorSpace = ALXRColorSpace.Quest,
-#if DEBUG
-                verbose = true,
-#else
+                displayColorSpace = ALXRColorSpace.Default,
+                facialTracking = config.FacialTrackingExt,
+                eyeTracking = config.EyeTrackingExt,
                 verbose = config.VerboseLogs,
-#endif
                 disableLinearizeSrgb = false,
                 noSuggestedBindings = true,
                 noServerFramerateLock = false,
@@ -180,6 +178,8 @@ namespace ALVRTrackingInterface
                 disableLocalDimming = true,
                 headlessSession = config.HeadlessSession,
                 noFTServer = true,
+                noPassthrough = true,
+                noHandTracking = !config.EnableHandleTracking,
                 firmwareVersion = new ALXRVersion
                 {
                     // only relevant for android clients.
