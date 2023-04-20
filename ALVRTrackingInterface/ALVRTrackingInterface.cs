@@ -7,6 +7,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -44,7 +45,7 @@ namespace ALVRTrackingInterface
             // Will allow other modules such as SRanipal to overlap should we want that (in the case of using the Facial Tracker in place of the Quest's lip tracker).
             eyeActive = eyeAvailable;
             lipActive = expressionAvailable;
-            
+
             LoadConfigControl();
 
             return (eyeActive, lipActive);
@@ -94,6 +95,18 @@ namespace ALVRTrackingInterface
             configUITask.Wait();
             var runConfig = configUITask.Result;
             SetRunAction(GetRunAction(runConfig));
+        }
+
+        private void SetActiveRuntimeLabel(string rtName)
+        {
+            var runtimeName = rtName.Clone() as string;
+            Application.Current.Dispatcher.BeginInvoke(new Action(() =>
+            {
+                if (configControl != null)
+                {
+                    configControl.ActiveRuntime = runtimeName;
+                }
+            }));
         }
 
         private RunAction GetRunAction(RunConfig runConfig)
@@ -179,7 +192,7 @@ namespace ALVRTrackingInterface
                 headlessSession = config.HeadlessSession,
                 noFTServer = true,
                 noPassthrough = true,
-                noHandTracking = !config.EnableHandleTracking,
+                noHandTracking = true, //!config.EnableHandleTracking, temp disabled for future OSC supprot.
                 firmwareVersion = new ALXRVersion
                 {
                     // only relevant for android clients.
@@ -225,6 +238,8 @@ namespace ALVRTrackingInterface
                     {
                         break;
                     }
+
+                    SetActiveRuntimeLabel(sysProperties.systemName);
 
                     var newPacket = new ALXRFacialEyePacket();
                     var processFrameResult = new ALXRProcessFrameResult

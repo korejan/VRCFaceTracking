@@ -252,6 +252,17 @@ namespace ALVRTrackingInterface.UI
             set => EyeTrackingComboBox.SelectedIndex = (int)value;
         }
 
+        public string ActiveRuntime
+        {
+            get { return (string)ActiveRuntimeLabel.Content; }
+            set
+            {
+                if (string.IsNullOrEmpty(value))
+                    value = "Unknown";
+                ActiveRuntimeLabel.Content = value;
+            }
+        }
+
         public void SaveConfig()
         {
             try
