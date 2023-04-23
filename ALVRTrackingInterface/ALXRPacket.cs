@@ -5,49 +5,51 @@ using System.Runtime.CompilerServices;
 
 namespace ALVRTrackingInterface
 {
-    enum VRFCFTExpressionType : byte
+    public enum ALXRFacialExpressionType : byte
     {
         None = 0, // Not Support or Disabled
         FB,
         HTC,
         Pico,
+        Auto,
         TypeCount
     };
-    enum VRFCFTEyeType : byte
+    public enum ALXREyeTrackingType : byte
     {
         None = 0, // Not Support or Disabled
         FBEyeTrackingSocial,
         ExtEyeGazeInteraction,
+        Auto,
         TypeCount
     };
 
     [StructLayout(LayoutKind.Sequential)]
-    struct XrVector3
+    public struct XrVector3
     {
         public float x, y, z;
     };
 
     [StructLayout(LayoutKind.Sequential)]
-    struct XrQuaternion
+    public struct XrQuaternion
     {
         public float x, y, z, w;
     };
 
     [StructLayout(LayoutKind.Sequential)]
-    struct XrPosef
+    public struct XrPosef
     {
         public XrQuaternion orientation;
         public XrVector3 position;
     };
 
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
-    struct VRCFTPacket
+    public struct ALXRFacialEyePacket
     {
         public const int MaxEyeCount = 2;
         public const int MaxExpressionCount = 63;
 
-        public VRFCFTExpressionType expressionType;
-        public VRFCFTEyeType eyeTrackerType;
+        public ALXRFacialExpressionType expressionType;
+        public ALXREyeTrackingType eyeTrackerType;
         public byte isEyeFollowingBlendshapesValid;
         public unsafe fixed byte isEyeGazePoseValid[MaxEyeCount];
         public unsafe fixed float expressionWeights[MaxExpressionCount];
@@ -71,17 +73,17 @@ namespace ALVRTrackingInterface
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static VRCFTPacket ReadPacket(byte[] array)
+        public static ALXRFacialEyePacket ReadPacket(byte[] array)
         {
-            var newPacket = new VRCFTPacket();
+            var newPacket = new ALXRFacialEyePacket();
             ReadPacket(array, ref newPacket);
             return newPacket;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void ReadPacket(byte[] array, ref VRCFTPacket newPacket)
+        public static void ReadPacket(byte[] array, ref ALXRFacialEyePacket newPacket)
         {
-            Debug.Assert(array.Length >= Marshal.SizeOf<VRCFTPacket>());
+            Debug.Assert(array.Length >= Marshal.SizeOf<ALXRFacialEyePacket>());
             ReadMemoryMarshal(array, 0, array.Length, out newPacket);
         }
 
