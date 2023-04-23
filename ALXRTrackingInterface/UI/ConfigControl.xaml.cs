@@ -9,7 +9,7 @@ using System.Text.Json.Serialization;
 using System.Reflection;
 using VRCFaceTracking;
 
-namespace ALVRTrackingInterface.UI
+namespace ALXRTrackingInterface.UI
 {
     public enum RunMethod
     {

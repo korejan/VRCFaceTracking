@@ -2,7 +2,7 @@
 using System.Runtime.InteropServices;
 using VRCFaceTracking;
 
-namespace ALVRTrackingInterface
+namespace ALXRTrackingInterface
 {
     #region ALVR C-Types, Ignore These
     [StructLayout(LayoutKind.Sequential)]

@@ -3,7 +3,7 @@ using System.Net;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace ALVRTrackingInterface.UI
+namespace ALXRTrackingInterface.UI
 {
     public sealed class IPAddressJsonConverter : JsonConverter<IPAddress>
     {

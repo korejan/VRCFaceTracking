@@ -6,11 +6,11 @@ using VRCFaceTracking;
 // General Information about an assembly is controlled through the following 
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
-[assembly: AssemblyTitle("ALVRTrackingInterface")]
+[assembly: AssemblyTitle("ALXRTrackingInterface")]
 [assembly: AssemblyDescription("")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("")]
-[assembly: AssemblyProduct("ALVR Tracking Interface")]
+[assembly: AssemblyProduct("ALXR Tracking Interface")]
 [assembly: AssemblyCopyright("Copyright © 2023")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]

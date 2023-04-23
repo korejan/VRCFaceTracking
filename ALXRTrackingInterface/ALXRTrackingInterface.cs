@@ -1,4 +1,4 @@
-﻿using ALVRTrackingInterface.UI;
+﻿using ALXRTrackingInterface.UI;
 using System;
 using System.Collections.Concurrent;
 using System.Diagnostics;
@@ -18,11 +18,11 @@ using System.Windows.Media;
 using VRCFaceTracking;
 using VRCFaceTracking.Params;
 
-namespace ALVRTrackingInterface
+namespace ALXRTrackingInterface
 {
     using RunAction = Action<System.Threading.CancellationToken>;
 
-    public sealed class ALVRTrackingInterface : ExtTrackingModule
+    public sealed class ALXRTrackingInterface : ExtTrackingModule
     {
         public const int PORT = 13191;
 

@@ -3,7 +3,7 @@ using System;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 
-namespace ALVRTrackingInterface
+namespace ALXRTrackingInterface
 {
     public enum ALXRFacialExpressionType : byte
     {
