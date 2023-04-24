@@ -95,6 +95,7 @@
     <Compile Include="ALXRPacket.cs" />
     <Compile Include="HTCExpression.cs" />
     <Compile Include="LibALXR.cs" />
+    <Compile Include="ModuleConfig.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="FBData.cs" />
     <Compile Include="FBExpression.cs" />
